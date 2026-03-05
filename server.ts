@@ -51,6 +51,7 @@ async function startServer() {
 
   // MongoDB Connection
   let MONGODB_URI = process.env.MONGODB_URI || "";
+  let isMockMode = false;
   
   // Basic validation and sanitization
   MONGODB_URI = MONGODB_URI.trim();
@@ -72,6 +73,9 @@ async function startServer() {
     }
   }
 
+  // Disable buffering so we don't hang if connection fails
+  mongoose.set('bufferCommands', false);
+
   try {
     const maskedUri = MONGODB_URI.replace(/\/\/(.*):(.*)@/, "//***:***@");
     console.log(`Connecting to MongoDB at: ${maskedUri}`);
@@ -82,9 +86,17 @@ async function startServer() {
     console.log("Connected to MongoDB successfully");
   } catch (err) {
     console.error("MongoDB connection error:", err.message);
-    console.log("Running in 'Mock Mode' - API will return empty arrays or errors until MongoDB is connected.");
+    isMockMode = true;
+    console.log("Running in 'Mock Mode' - API will return mock data for testing.");
     console.log("TIP: Ensure your MONGODB_URI is correctly set in the platform environment variables.");
   }
+
+  // Mock Data Store (for Mock Mode)
+  const mockStore = {
+    users: [] as any[],
+    tasks: [] as any[],
+    projects: [] as any[]
+  };
 
   app.use(cors());
   app.use(express.json());
@@ -108,19 +120,40 @@ async function startServer() {
     try {
       const { name, email, password } = req.body;
       const hashedPassword = await bcrypt.hash(password, 10);
-      const user = new UserModel({ name, email, password: hashedPassword });
-      await user.save();
+      
+      let user;
+      if (isMockMode) {
+        user = { _id: Date.now().toString(), name, email, password: hashedPassword, role: 'admin' };
+        mockStore.users.push(user);
+      } else {
+        user = new UserModel({ name, email, password: hashedPassword });
+        await user.save();
+      }
+      
       const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET);
       res.status(201).json({ user, token });
     } catch (err) {
-      res.status(400).json({ error: "Email already exists" });
+      res.status(400).json({ error: "Registration failed" });
     }
   });
 
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      const user = await UserModel.findOne({ email });
+      
+      let user;
+      if (isMockMode) {
+        // In mock mode, check mock store or allow default sarah
+        user = mockStore.users.find(u => u.email === email);
+        if (!user && email === "sarah@fintrack.com") {
+          const hashedPassword = await bcrypt.hash("password123", 10);
+          user = { _id: "mock-sarah", name: "Sarah Connor", email: "sarah@fintrack.com", password: hashedPassword, role: 'admin' };
+          mockStore.users.push(user);
+        }
+      } else {
+        user = await UserModel.findOne({ email });
+      }
+
       if (!user) return res.status(400).json({ error: "User not found" });
 
       const validPassword = await bcrypt.compare(password, user.password);
@@ -129,13 +162,19 @@ async function startServer() {
       const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET);
       res.json({ user, token });
     } catch (err) {
-      res.status(500).json({ error: "Login failed" });
+      console.error("Login error:", err);
+      res.status(500).json({ error: "Login failed. Check server logs." });
     }
   });
 
   app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
     try {
-      const user = await UserModel.findById(req.user.id).select("-password");
+      let user;
+      if (isMockMode) {
+        user = mockStore.users.find(u => u._id === req.user.id);
+      } else {
+        user = await UserModel.findById(req.user.id).select("-password");
+      }
       res.json(user);
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch user" });
@@ -154,19 +193,30 @@ async function startServer() {
   });
 
   // Tasks API
-  app.get("/api/tasks", async (req, res) => {
+  app.get("/api/tasks", authenticateToken, async (req, res) => {
     try {
-      const tasks = await TaskModel.find();
+      let tasks;
+      if (isMockMode) {
+        tasks = mockStore.tasks;
+      } else {
+        tasks = await TaskModel.find().sort({ createdAt: -1 });
+      }
       res.json(tasks);
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch tasks" });
     }
   });
 
-  app.post("/api/tasks", async (req, res) => {
+  app.post("/api/tasks", authenticateToken, async (req, res) => {
     try {
-      const task = new TaskModel(req.body);
-      await task.save();
+      let task;
+      if (isMockMode) {
+        task = { ...req.body, _id: Date.now().toString(), createdAt: new Date() };
+        mockStore.tasks.unshift(task);
+      } else {
+        task = new TaskModel(req.body);
+        await task.save();
+      }
       io.emit("task:created", task);
       res.status(201).json(task);
     } catch (err) {
@@ -174,9 +224,21 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/tasks/:id", async (req, res) => {
+  app.patch("/api/tasks/:id", authenticateToken, async (req, res) => {
     try {
-      const task = await TaskModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      let task;
+      if (isMockMode) {
+        const index = mockStore.tasks.findIndex(t => t._id === req.params.id);
+        if (index !== -1) {
+          mockStore.tasks[index] = { ...mockStore.tasks[index], ...req.body };
+          task = mockStore.tasks[index];
+        }
+      } else {
+        task = await TaskModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      }
+      
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      
       io.emit("task:updated", task);
       res.json(task);
     } catch (err) {
@@ -185,19 +247,30 @@ async function startServer() {
   });
 
   // Projects API
-  app.get("/api/projects", async (req, res) => {
+  app.get("/api/projects", authenticateToken, async (req, res) => {
     try {
-      const projects = await ProjectModel.find();
+      let projects;
+      if (isMockMode) {
+        projects = mockStore.projects;
+      } else {
+        projects = await ProjectModel.find();
+      }
       res.json(projects);
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch projects" });
     }
   });
 
-  app.post("/api/projects", async (req, res) => {
+  app.post("/api/projects", authenticateToken, async (req, res) => {
     try {
-      const project = new ProjectModel(req.body);
-      await project.save();
+      let project;
+      if (isMockMode) {
+        project = { ...req.body, _id: Date.now().toString() };
+        mockStore.projects.push(project);
+      } else {
+        project = new ProjectModel(req.body);
+        await project.save();
+      }
       res.status(201).json(project);
     } catch (err) {
       res.status(400).json({ error: "Failed to create project" });
@@ -207,95 +280,32 @@ async function startServer() {
   // Seed Data Route
   app.post("/api/seed", async (req, res) => {
     try {
-      // Only seed if empty to avoid accidental data loss
-      const taskCount = await TaskModel.countDocuments();
-      const projectCount = await ProjectModel.countDocuments();
-      
-      if (taskCount > 0 && projectCount > 0) {
-        return res.json({ message: "Database already has data" });
-      }
+      const mockTasks = [
+        { taskId: 'GSWW-1', title: 'Invite your team members to your workspace', project: 'Getting Started with WebWork', priority: 'High', status: 'OPEN' },
+        { taskId: 'GSWW-2', title: 'Create a new project and outline your tasks', project: 'Getting Started with WebWork', priority: 'Low', status: 'OPEN' },
+        { taskId: 'GSWW-3', title: 'Assign team members to your projects', project: 'Getting Started with WebWork', priority: 'Medium', status: 'OPEN' },
+        { taskId: 'GSWW-4', title: 'Verify team members have installed the software and started tracking time', project: 'Getting Started with WebWork', priority: 'Medium', status: 'OPEN' },
+        { taskId: 'GSWW-5', title: 'Dive into time tracking reports and productivity insights', project: 'Getting Started with WebWork', priority: 'Medium', status: 'OPEN' },
+        { taskId: 'FT-1', title: 'Setup MongoDB connection and schemas', project: 'FinTrack Mobile App', priority: 'High', status: 'DONE' },
+        { taskId: 'FT-2', title: 'Implement JWT authentication', project: 'FinTrack Mobile App', priority: 'High', status: 'DONE' },
+        { taskId: 'FT-3', title: 'Integrate Socket.io for real-time updates', project: 'FinTrack Mobile App', priority: 'Medium', status: 'IN PROGRESS' },
+      ];
 
-      // Ensure default user exists
-      const sarah = await UserModel.findOne({ email: "sarah@fintrack.com" });
-      if (!sarah) {
-        const hashedPassword = await bcrypt.hash("password123", 10);
-        const defaultUser = new UserModel({
-          name: "Sarah Connor",
-          email: "sarah@fintrack.com",
-          password: hashedPassword,
-          role: "admin",
-          avatar: "https://picsum.photos/seed/sarah/100/100"
-        });
-        await defaultUser.save();
-      }
+      const mockProjects = [
+        { name: 'Getting Started with WebWork', description: 'Onboarding project' },
+        { name: 'FinTrack Mobile App', description: 'Main mobile application' },
+        { name: 'Enterprise Dashboard', description: 'Internal admin panel' },
+      ];
 
-      if (projectCount === 0) {
-        await ProjectModel.insertMany([
-          { name: 'Getting Started with WebWork', description: 'Onboarding project' },
-          { name: 'FinTrack Mobile App', description: 'Main mobile application' },
-          { name: 'Enterprise Dashboard', description: 'Internal admin panel' },
-        ]);
-      }
-
-      if (taskCount === 0) {
-        await TaskModel.insertMany([
-          { 
-            taskId: 'GSWW-1', 
-            title: 'Invite your team members to your workspace', 
-            project: 'Getting Started with WebWork', 
-            priority: 'High', 
-            status: 'OPEN' 
-          },
-          { 
-            taskId: 'GSWW-2', 
-            title: 'Create a new project and outline your tasks', 
-            project: 'Getting Started with WebWork', 
-            priority: 'Low', 
-            status: 'OPEN' 
-          },
-          { 
-            taskId: 'GSWW-3', 
-            title: 'Assign team members to your projects', 
-            project: 'Getting Started with WebWork', 
-            priority: 'Medium', 
-            status: 'OPEN' 
-          },
-          { 
-            taskId: 'GSWW-4', 
-            title: 'Verify team members have installed the software and started tracking time', 
-            project: 'Getting Started with WebWork', 
-            priority: 'Medium', 
-            status: 'OPEN' 
-          },
-          { 
-            taskId: 'GSWW-5', 
-            title: 'Dive into time tracking reports and productivity insights', 
-            project: 'Getting Started with WebWork', 
-            priority: 'Medium', 
-            status: 'OPEN' 
-          },
-          { 
-            taskId: 'FT-1', 
-            title: 'Setup MongoDB connection and schemas', 
-            project: 'FinTrack Mobile App', 
-            priority: 'High', 
-            status: 'DONE' 
-          },
-          { 
-            taskId: 'FT-2', 
-            title: 'Implement JWT authentication', 
-            project: 'FinTrack Mobile App', 
-            priority: 'High', 
-            status: 'DONE' 
-          },
-          { 
-            taskId: 'FT-3', 
-            title: 'Integrate Socket.io for real-time updates', 
-            project: 'FinTrack Mobile App', 
-            priority: 'Medium', 
-            status: 'IN PROGRESS' 
-          },
-        ]);
+      if (isMockMode) {
+        mockStore.tasks = mockTasks.map(t => ({ ...t, _id: Math.random().toString(36).substr(2, 9), createdAt: new Date() }));
+        mockStore.projects = mockProjects.map(p => ({ ...p, _id: Math.random().toString(36).substr(2, 9) }));
+      } else {
+        const taskCount = await TaskModel.countDocuments();
+        const projectCount = await ProjectModel.countDocuments();
+        
+        if (taskCount === 0) await TaskModel.insertMany(mockTasks);
+        if (projectCount === 0) await ProjectModel.insertMany(mockProjects);
       }
 
       res.json({ message: "Database seeded successfully" });
