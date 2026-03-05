@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import { View, User } from './types';
+import { Task } from './data';
+import { api } from './api';
+import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Bell, 
@@ -52,16 +55,9 @@ import NotificationsDropdown from './components/NotificationsDropdown';
 import { ToastProvider, useToast } from './components/Toast';
 
 const AppContent: React.FC = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const { showToast } = useToast();
-  const [user] = useState<User>({
-    id: '1',
-    name: 'Sarah Connor',
-    email: 'sarah@fintrack.com',
-    role: 'admin',
-    avatar: 'https://picsum.photos/seed/sarah/100/100'
-  });
 
   // Modal States
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -71,6 +67,59 @@ const AppContent: React.FC = () => {
   const [isGenerateInvoiceModalOpen, setIsGenerateInvoiceModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string>('');
+  const [selectedMember, setSelectedMember] = useState<{id: string, name: string, avatar?: string} | null>(null);
+  const [selectedProject, setSelectedProject] = useState<{id: string, name: string} | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isTaskSelectorOpen, setIsTaskSelectorOpen] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      api.getMe().then(user => {
+        setUser(user);
+      }).catch(() => {
+        api.logout();
+        setUser(null);
+      });
+    }
+
+    const newSocket = io();
+    setSocket(newSocket);
+
+    newSocket.on('task:created', (newTask: Task) => {
+      setTasks(prev => [...prev, newTask]);
+    });
+
+    newSocket.on('task:updated', (updatedTask: Task) => {
+      setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    });
+
+    return () => {
+      newSocket.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const init = async () => {
+      try {
+        // Check if we need to seed
+        const currentTasks = await api.getTasks();
+        if (currentTasks.length === 0) {
+          await api.seedDatabase();
+          const seededTasks = await api.getTasks();
+          setTasks(seededTasks);
+        } else {
+          setTasks(currentTasks);
+        }
+      } catch (err) {
+        console.error("Failed to initialize data:", err);
+      }
+    };
+    init();
+  }, [user]);
 
   // Timer State
   const [isTracking, setIsTracking] = useState(false);
@@ -100,11 +149,34 @@ const AppContent: React.FC = () => {
     setIsScreenshotModalOpen(true);
   };
 
-  if (!isLoggedIn) {
-    return <Login onLogin={() => {
-      setIsLoggedIn(true);
-      showToast('Welcome back, Sarah!');
-    }} />;
+  const navigateToMemberProductivity = (member: {id: string, name: string, avatar?: string}) => {
+    setSelectedMember(member);
+    setCurrentView('productivity-insights');
+  };
+
+  const navigateToChat = (member: {id: string, name: string, avatar?: string}) => {
+    setSelectedMember(member);
+    setCurrentView('chat');
+  };
+
+  const navigateToProjectTasks = (project: {id: string, name: string}) => {
+    setSelectedProject(project);
+    setCurrentView('tasks');
+  };
+
+  const handleLogin = async (credentials: any) => {
+    try {
+      const { user } = await api.login(credentials);
+      setUser(user);
+      showToast('Welcome back!');
+    } catch (err) {
+      showToast('Login failed. Please check your credentials.', 'error');
+      throw err;
+    }
+  };
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
   }
 
   return (
@@ -116,7 +188,8 @@ const AppContent: React.FC = () => {
           setSearchQuery(''); // Reset search on view change
         }} 
         onLogout={() => {
-          setIsLoggedIn(false);
+          api.logout();
+          setUser(null);
           showToast('Logged out successfully', 'info');
         }} 
       />
@@ -139,15 +212,31 @@ const AppContent: React.FC = () => {
             <div className="h-8 w-px bg-white/5" />
 
             {/* Timer Widget */}
-            <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2">
-              <div className="flex flex-col">
-                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest leading-none mb-1">Tracking Time</span>
-                <span className={`text-sm font-mono font-bold ${isTracking ? 'text-emerald-500' : 'text-gray-400'}`}>
-                  {formatTime(timerSeconds)}
+            <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 relative">
+              <div 
+                className="flex flex-col cursor-pointer hover:opacity-80 transition-all"
+                onClick={() => setIsTaskSelectorOpen(!isTaskSelectorOpen)}
+              >
+                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest leading-none mb-1">
+                  {selectedTask ? selectedTask.project : 'Select Task'}
                 </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-mono font-bold ${isTracking ? 'text-emerald-500' : 'text-gray-400'}`}>
+                    {formatTime(timerSeconds)}
+                  </span>
+                  <ChevronDown size={12} className="text-gray-500" />
+                </div>
+                {selectedTask && (
+                  <span className="text-[10px] text-indigo-400 truncate max-w-[120px]">{selectedTask.title}</span>
+                )}
               </div>
               <button 
                 onClick={() => {
+                  if (!selectedTask && !isTracking) {
+                    setIsTaskSelectorOpen(true);
+                    showToast('Please select a task first', 'info');
+                    return;
+                  }
                   setIsTracking(!isTracking);
                   showToast(isTracking ? 'Time tracking stopped' : 'Time tracking started', isTracking ? 'info' : 'success');
                 }}
@@ -159,6 +248,47 @@ const AppContent: React.FC = () => {
               >
                 {isTracking ? <X size={20} /> : <Clock size={20} />}
               </button>
+
+              {/* Task Selector Dropdown */}
+              <AnimatePresence>
+                {isTaskSelectorOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute top-full left-0 mt-2 w-72 bg-[#1c1d21] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                  >
+                    <div className="p-4 border-b border-white/5">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Select Task</h4>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-2">
+                      {tasks.map((task) => (
+                        <button
+                          key={task.id}
+                          onClick={() => {
+                            setSelectedTask(task);
+                            setIsTaskSelectorOpen(false);
+                          }}
+                          className={`w-full text-left p-3 rounded-xl transition-all hover:bg-white/5 flex flex-col gap-1 ${selectedTask?.id === task.id ? 'bg-indigo-500/10' : ''}`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-gray-500 font-mono">{task.taskId}</span>
+                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                              task.priority === 'High' ? 'bg-red-500/10 text-red-500' :
+                              task.priority === 'Medium' ? 'bg-amber-500/10 text-amber-500' :
+                              'bg-blue-500/10 text-blue-500'
+                            }`}>
+                              {task.priority}
+                            </span>
+                          </div>
+                          <span className="text-xs text-white font-medium line-clamp-1">{task.title}</span>
+                          <span className="text-[10px] text-gray-500">{task.project}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -214,7 +344,7 @@ const AppContent: React.FC = () => {
                         Settings
                       </button>
                       <button 
-                        onClick={() => { setIsLoggedIn(false); setIsProfileOpen(false); showToast('Logged out successfully', 'info'); }}
+                        onClick={() => { api.logout(); setUser(null); setIsProfileOpen(false); showToast('Logged out successfully', 'info'); }}
                         className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
                       >
                         <LogOut size={16} />
@@ -242,20 +372,33 @@ const AppContent: React.FC = () => {
               {currentView === 'activity' && <Activity onOpenScreenshot={openScreenshot} />}
               {currentView === 'time-logs' && <TimeLogs onOpenManualEntry={() => setIsManualTimeModalOpen(true)} searchQuery={searchQuery} />}
               {currentView === 'calendar' && <CalendarView />}
-              {currentView === 'tasks' && <Tasks />}
+              {currentView === 'tasks' && (
+                <Tasks 
+                  selectedProject={selectedProject}
+                  onProjectSelect={setSelectedProject}
+                />
+              )}
               {[
                 'reports', 'tracked-hours', 'timeline', 'attendance', 'activity-level', 
                 'activity-description', 'apps-websites-report', 'tasks-report', 'breaks', 
                 'billable-hours', 'project-budgeting', 'payroll-report', 'unified-reporting', 
                 'scheduled-reports', 'all-reports'
               ].includes(currentView) && <Reports view={currentView} onViewChange={setCurrentView} />}
-              {currentView === 'projects' && <Projects onOpenCreate={() => setIsCreateProjectModalOpen(true)} searchQuery={searchQuery} />}
+              {currentView === 'projects' && (
+                <Projects 
+                  onOpenCreate={() => setIsCreateProjectModalOpen(true)} 
+                  searchQuery={searchQuery} 
+                  onProjectClick={navigateToProjectTasks}
+                />
+              )}
               {currentView === 'clients' && <Clients />}
               {['people', 'members', 'teams', 'titles', 'project-viewers', 'customers'].includes(currentView) && (
                 <People 
                   view={currentView} 
                   onOpenInvite={() => setIsInviteModalOpen(true)} 
                   searchQuery={searchQuery} 
+                  onMemberClick={navigateToMemberProductivity}
+                  onChatClick={navigateToChat}
                 />
               )}
               {['finances', 'manage-payroll', 'payroll-report'].includes(currentView) && <Payroll onOpenGenerateInvoice={() => setIsGenerateInvoiceModalOpen(true)} />}
@@ -264,7 +407,13 @@ const AppContent: React.FC = () => {
               {currentView === 'real-time' && <RealTime />}
               {currentView === 'webwork-ai' && <WebWorkAI />}
               {['monitoring', 'screenshots', 'daily-activity', 'unusual-activity', 'smart-monitoring'].includes(currentView) && <Monitoring view={currentView} />}
-              {['productivity', 'productivity-insights', 'apps-websites-prod', 'work-life-balance', 'burnout-risk'].includes(currentView) && <Productivity view={currentView} />}
+              {['productivity', 'productivity-insights', 'apps-websites-prod', 'work-life-balance', 'burnout-risk'].includes(currentView) && (
+                <Productivity 
+                  view={currentView} 
+                  selectedMember={selectedMember}
+                  onMemberSelect={setSelectedMember}
+                />
+              )}
               {['time-off', 'holidays', 'leave', 'leave-balance'].includes(currentView) && <TimeOff view={currentView} />}
               {currentView === 'shifts' && <Shifts />}
               {['communication', 'video-meetings', 'chat'].includes(currentView) && <Communication view={currentView} />}

@@ -28,7 +28,15 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const Communication = ({ view = 'chat' }: { view?: string }) => {
+const Communication = ({ 
+  view = 'chat', 
+  selectedMember, 
+  onMemberSelect 
+}: { 
+  view?: string, 
+  selectedMember?: { id: string, name: string, avatar?: string } | null,
+  onMemberSelect?: (member: any) => void
+}) => {
   const [activeTab, setActiveTab] = useState(view === 'video-meetings' ? 'Video Meetings' : 'Chat');
 
   const ChatView = () => (
@@ -122,8 +130,10 @@ const Communication = ({ view = 'chat' }: { view?: string }) => {
       <div className="flex-1 flex flex-col bg-[#0f0f0f]">
         <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-xs font-bold text-emerald-400">MT</div>
-            <h2 className="font-bold text-white">Muhammad Tayyab</h2>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-xs font-bold text-emerald-400">
+              {selectedMember ? selectedMember.name.charAt(0) : 'MT'}
+            </div>
+            <h2 className="font-bold text-white">{selectedMember ? selectedMember.name : 'Muhammad Tayyab'}</h2>
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
           </div>
           <div className="flex items-center gap-4 text-gray-500">
@@ -140,7 +150,7 @@ const Communication = ({ view = 'chat' }: { view?: string }) => {
             </div>
           </div>
           <h3 className="text-xl font-bold text-white mb-2">No messages</h3>
-          <p className="text-gray-500 max-w-sm">Start a conversation with Muhammad Tayyab or invite more teammates to join.</p>
+          <p className="text-gray-500 max-w-sm">Start a conversation with {selectedMember ? selectedMember.name : 'Muhammad Tayyab'} or invite more teammates to join.</p>
         </div>
 
         <div className="p-6">

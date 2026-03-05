@@ -10,10 +10,26 @@ import {
 import { motion } from 'motion/react';
 
 interface LoginProps {
-  onLogin: () => void;
+  onLogin: (credentials: any) => Promise<void>;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await onLogin({ email, password });
+    } catch (err) {
+      // Error handled in App.tsx
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -35,7 +51,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <p className="text-gray-400 text-sm">Enter your credentials to access your account</p>
           </div>
 
-          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); onLogin(); }}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-300 ml-1">Email Address</label>
               <div className="relative">
@@ -43,6 +59,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <input 
                   type="email" 
                   placeholder="name@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
                   required
                 />
@@ -59,6 +77,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <input 
                   type="password" 
                   placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
                   required
                 />
@@ -67,10 +87,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             <button 
               type="submit"
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 group shadow-lg shadow-emerald-500/20"
+              disabled={isLoading}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 group shadow-lg shadow-emerald-500/20"
             >
-              Sign In
-              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+              {isLoading ? 'Signing In...' : 'Sign In'}
+              {!isLoading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
             </button>
           </form>
 

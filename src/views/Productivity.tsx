@@ -31,12 +31,15 @@ import {
   Globe,
   Monitor,
   Edit2,
-  Columns
+  Columns,
+  X
 } from 'lucide-react';
 import { View } from '../types';
 
 interface ProductivityProps {
   view?: View;
+  selectedMember?: { id: string, name: string, avatar?: string } | null;
+  onMemberSelect?: (member: { id: string, name: string, avatar?: string } | null) => void;
 }
 
 // --- Shared Components ---
@@ -90,7 +93,7 @@ const PlusFeaturePlaceholder = ({ title, description, isPremium = false }: { tit
 
 // --- Individual Productivity Views ---
 
-const ProductivityInsightsView = () => (
+const ProductivityInsightsView = ({ selectedMember, onMemberSelect }: { selectedMember?: any, onMemberSelect?: (m: any) => void }) => (
   <div className="space-y-6">
     <ProductivityHeader title="Productivity" />
     <div className="flex gap-8 border-b border-white/5 mb-6">
@@ -101,10 +104,19 @@ const ProductivityInsightsView = () => (
     </div>
 
     <div className="flex items-center gap-3 mb-8">
-      <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 min-w-[180px]">
+      <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 min-w-[180px] cursor-pointer hover:bg-white/10 transition-all group relative">
         <User size={14} className="text-gray-500" />
-        <span className="text-sm text-gray-300">Muhammad T...</span>
+        <span className="text-sm text-gray-300">{selectedMember?.name || 'Select Member'}</span>
         <ChevronDown size={14} className="ml-auto text-gray-500" />
+        
+        {selectedMember && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); onMemberSelect?.(null); }}
+            className="absolute -right-2 -top-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all"
+          >
+            <X size={12} />
+          </button>
+        )}
       </div>
       <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 min-w-[220px]">
         <Calendar size={14} className="text-gray-500" />
@@ -116,11 +128,40 @@ const ProductivityInsightsView = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-1 space-y-2">
         <h3 className="text-sm font-bold text-gray-400 mb-2">Time</h3>
-        <NoDataWidget title="Time" icon={Clock} description="No data about time yet." />
+        {selectedMember ? (
+          <div className="bg-[#151619] border border-white/5 rounded-2xl p-6 min-h-[300px] flex flex-col justify-center">
+            <div className="text-center">
+              <p className="text-gray-500 text-xs uppercase font-bold mb-2">Total Tracked</p>
+              <h2 className="text-4xl font-bold text-white">32h 45m</h2>
+              <div className="mt-4 flex items-center justify-center gap-2 text-emerald-500 text-sm">
+                <TrendingUp size={16} /> +12% vs last week
+              </div>
+            </div>
+          </div>
+        ) : (
+          <NoDataWidget title="Time" icon={Clock} description="No data about time yet." />
+        )}
       </div>
       <div className="lg:col-span-1 space-y-2">
         <h3 className="text-sm font-bold text-gray-400 mb-2">Tasks</h3>
-        <NoDataWidget title="Tasks" icon={List} description="No tasks for this member yet." />
+        {selectedMember ? (
+          <div className="bg-[#151619] border border-white/5 rounded-2xl p-6 min-h-[300px]">
+            <div className="space-y-4">
+              {[
+                { name: 'Financial Audit', status: 'Done', color: 'emerald' },
+                { name: 'Quarterly Review', status: 'In Progress', color: 'blue' },
+                { name: 'Tax Filing', status: 'To Do', color: 'gray' }
+              ].map((t, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                  <span className="text-sm text-white">{t.name}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-${t.color}-500/10 text-${t.color}-500`}>{t.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <NoDataWidget title="Tasks" icon={List} description="No tasks for this member yet." />
+        )}
       </div>
       <div className="lg:col-span-1 space-y-2">
         <h3 className="text-sm font-bold text-gray-400 mb-2">Attendance</h3>
@@ -161,11 +202,48 @@ const ProductivityInsightsView = () => (
             Percent of work time <ChevronDown size={10} />
           </div>
         </div>
-        <NoDataWidget title="Productivity" icon={TrendingUp} description="No data about productivity yet." />
+        {selectedMember ? (
+          <div className="bg-[#151619] border border-white/5 rounded-2xl p-6 min-h-[300px] flex flex-col items-center justify-center">
+            <div className="relative w-48 h-48">
+              <svg className="w-full h-full" viewBox="0 0 36 36">
+                <path className="text-white/5" strokeDasharray="100, 100" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className="text-indigo-500" strokeDasharray="85, 100" strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-4xl font-bold text-white">85%</span>
+                <span className="text-[10px] text-gray-500 uppercase font-bold">Productive</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <NoDataWidget title="Productivity" icon={TrendingUp} description="No data about productivity yet." />
+        )}
       </div>
       <div className="space-y-2">
         <h3 className="text-sm font-bold text-gray-400 mb-2">Productive Time</h3>
-        <NoDataWidget title="Productive Time" icon={Activity} description="No data about productivity yet." />
+        {selectedMember ? (
+          <div className="bg-[#151619] border border-white/5 rounded-2xl p-6 min-h-[300px] flex flex-col justify-center">
+             <div className="space-y-6">
+               {[
+                 { label: 'Productive', time: '28h 15m', color: 'emerald', percent: 85 },
+                 { label: 'Neutral', time: '3h 10m', color: 'gray', percent: 10 },
+                 { label: 'Non-productive', time: '1h 20m', color: 'red', percent: 5 }
+               ].map((p, i) => (
+                 <div key={i} className="space-y-2">
+                   <div className="flex justify-between text-xs">
+                     <span className="text-gray-400">{p.label}</span>
+                     <span className="text-white font-bold">{p.time}</span>
+                   </div>
+                   <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                     <div className={`h-full bg-${p.color}-500`} style={{ width: `${p.percent}%` }} />
+                   </div>
+                 </div>
+               ))}
+             </div>
+          </div>
+        ) : (
+          <NoDataWidget title="Productive Time" icon={Activity} description="No data about productivity yet." />
+        )}
       </div>
     </div>
   </div>
@@ -305,8 +383,8 @@ const WorkLifeBalanceView = () => (
   </div>
 );
 
-const Productivity: React.FC<ProductivityProps> = ({ view = 'productivity' }) => {
-  if (view === 'productivity-insights') return <ProductivityInsightsView />;
+const Productivity: React.FC<ProductivityProps> = ({ view = 'productivity', selectedMember, onMemberSelect }) => {
+  if (view === 'productivity-insights') return <ProductivityInsightsView selectedMember={selectedMember} onMemberSelect={onMemberSelect} />;
   if (view === 'apps-websites-prod') return <AppsWebsitesView />;
   if (view === 'work-life-balance') return <WorkLifeBalanceView />;
   

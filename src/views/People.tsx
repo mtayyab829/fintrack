@@ -11,6 +11,7 @@ import {
   Download, 
   Plus, 
   Mail, 
+  MessageSquare,
   Shield, 
   Briefcase, 
   Layers, 
@@ -38,6 +39,8 @@ interface PeopleProps {
   view?: View;
   onOpenInvite?: () => void;
   searchQuery?: string;
+  onMemberClick?: (member: {id: string, name: string, avatar?: string}) => void;
+  onChatClick?: (member: {id: string, name: string, avatar?: string}) => void;
 }
 
 // --- Shared Components ---
@@ -69,8 +72,12 @@ const FilterButton = ({ icon: Icon, label }: { icon: any, label: string }) => (
 
 // --- Members View ---
 
-const MembersView = ({ onOpenInvite }: { onOpenInvite?: () => void }) => {
+const MembersView = ({ onOpenInvite, onMemberClick, onChatClick }: { onOpenInvite?: () => void, onMemberClick?: (member: any) => void, onChatClick?: (member: any) => void }) => {
   const [activeTab, setActiveTab] = useState('Members');
+
+  const members = [
+    { id: 'muhammad', name: 'Muhammad Tayyab', email: 'muhammadtayyab2928@...', avatar: 'https://picsum.photos/seed/muhammad/40/40', role: 'Owner', project: 'Getting Started with We...', title: 'Financial Analyst' }
+  ];
 
   return (
     <div className="space-y-6">
@@ -137,50 +144,67 @@ const MembersView = ({ onOpenInvite }: { onOpenInvite?: () => void }) => {
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-              <td className="p-4">
-                <div className="flex items-center gap-3">
-                  <img 
-                    src="https://picsum.photos/seed/muhammad/40/40" 
-                    className="w-10 h-10 rounded-xl object-cover" 
-                    alt="Muhammad Tayyab"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div>
-                    <p className="text-white font-medium">Muhammad Tayyab</p>
-                    <p className="text-gray-500 text-xs">muhammadtayyab2928@...</p>
+            {members.map((m) => (
+              <tr key={m.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                <td className="p-4">
+                  <div 
+                    className="flex items-center gap-3 cursor-pointer group"
+                    onClick={() => onMemberClick?.({ id: m.id, name: m.name, avatar: m.avatar })}
+                  >
+                    <img 
+                      src={m.avatar}
+                      className="w-10 h-10 rounded-xl object-cover group-hover:ring-2 group-hover:ring-indigo-500 transition-all" 
+                      alt={m.name}
+                      referrerPolicy="no-referrer"
+                    />
+                    <div>
+                      <p className="text-white font-medium group-hover:text-indigo-400 transition-colors">{m.name}</p>
+                      <p className="text-gray-500 text-xs">{m.email}</p>
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td className="p-4">
-                <button className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300">
-                  <Plus size={14} className="text-indigo-500" /> Add
-                </button>
-              </td>
-              <td className="p-4">
-                <div className="flex items-center gap-2">
-                  <button className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300">Add</button>
-                  <button className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 flex items-center gap-2">
-                    USD <ChevronDown size={14} />
+                </td>
+                <td className="p-4">
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onChatClick?.({ id: m.id, name: m.name, avatar: m.avatar });
+                      }}
+                      className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-indigo-400 transition-all"
+                      title="Chat"
+                    >
+                      <MessageSquare size={18} />
+                    </button>
+                    <button className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300">
+                      <Plus size={14} className="text-indigo-500" /> Add
+                    </button>
+                  </div>
+                </td>
+                <td className="p-4">
+                  <div className="flex items-center gap-2">
+                    <button className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300">Add</button>
+                    <button className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 flex items-center gap-2">
+                      USD <ChevronDown size={14} />
+                    </button>
+                  </div>
+                </td>
+                <td className="p-4 text-gray-400">{m.role}</td>
+                <td className="p-4 text-gray-400">{m.project}</td>
+                <td className="p-4">
+                  <button className="border border-dashed border-white/20 rounded-lg px-3 py-1.5 text-xs text-gray-500 hover:border-white/40 transition-all">
+                    Add to team
                   </button>
-                </div>
-              </td>
-              <td className="p-4 text-gray-400">Owner</td>
-              <td className="p-4 text-gray-400">Getting Started with We...</td>
-              <td className="p-4">
-                <button className="border border-dashed border-white/20 rounded-lg px-3 py-1.5 text-xs text-gray-500 hover:border-white/40 transition-all">
-                  Add to team
-                </button>
-              </td>
-              <td className="p-4">
-                <div className="space-y-2">
-                  <span className="bg-orange-400/10 text-orange-400 px-2 py-1 rounded text-[10px] font-bold uppercase">Financial Analyst</span>
-                  <button className="block border border-dashed border-white/20 rounded-lg px-3 py-1.5 text-[10px] text-gray-500 hover:border-white/40 transition-all">
-                    Give new title
-                  </button>
-                </div>
-              </td>
-            </tr>
+                </td>
+                <td className="p-4">
+                  <div className="space-y-2">
+                    <span className="bg-orange-400/10 text-orange-400 px-2 py-1 rounded text-[10px] font-bold uppercase">{m.title}</span>
+                    <button className="block border border-dashed border-white/20 rounded-lg px-3 py-1.5 text-[10px] text-gray-500 hover:border-white/40 transition-all">
+                      Give new title
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -472,8 +496,8 @@ const CustomersView = () => {
 
 // --- Main People Component ---
 
-const People: React.FC<PeopleProps> = ({ view = 'people', onOpenInvite, searchQuery = '' }) => {
-  if (view === 'members') return <MembersView onOpenInvite={onOpenInvite} />;
+const People: React.FC<PeopleProps> = ({ view = 'people', onOpenInvite, searchQuery = '', onMemberClick, onChatClick }) => {
+  if (view === 'members') return <MembersView onOpenInvite={onOpenInvite} onMemberClick={onMemberClick} onChatClick={onChatClick} />;
   
   if (view === 'teams') return (
     <DragDropListLayout 
@@ -495,7 +519,7 @@ const People: React.FC<PeopleProps> = ({ view = 'people', onOpenInvite, searchQu
   if (view === 'customers') return <CustomersView />;
 
   // Default People/Members view
-  return <MembersView onOpenInvite={onOpenInvite} />;
+  return <MembersView onOpenInvite={onOpenInvite} onMemberClick={onMemberClick} onChatClick={onChatClick} />;
 };
 
 export default People;

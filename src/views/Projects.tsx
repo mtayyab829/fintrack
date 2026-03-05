@@ -1,21 +1,28 @@
-import React from 'react';
+import { api } from '../api';
+import { useEffect, useState } from 'react';
 import { Plus, Search, Users, Clock, ChevronRight, MoreVertical } from 'lucide-react';
 
 interface ProjectsProps {
   onOpenCreate: () => void;
   searchQuery?: string;
+  onProjectClick?: (project: {id: string, name: string}) => void;
 }
 
-const Projects: React.FC<ProjectsProps> = ({ onOpenCreate, searchQuery = '' }) => {
-  const [activeTab, setActiveTab] = React.useState('all');
+const Projects = ({ onOpenCreate, searchQuery = '', onProjectClick }: ProjectsProps) => {
+  const [activeTab, setActiveTab] = useState('all');
+  const [projects, setProjects] = useState<any[]>([]);
 
-  const projects = [
-    { id: 1, name: 'FinTrack Mobile App', status: 'In Progress', members: 12, hours: 450, progress: 65, color: 'bg-emerald-500' },
-    { id: 2, name: 'Enterprise Dashboard', status: 'In Progress', members: 8, hours: 280, progress: 40, color: 'bg-blue-500' },
-    { id: 3, name: 'Marketing Website', status: 'Completed', members: 4, hours: 120, progress: 100, color: 'bg-purple-500' },
-    { id: 4, name: 'API Infrastructure', status: 'On Hold', members: 6, hours: 85, progress: 15, color: 'bg-amber-500' },
-    { id: 5, name: 'Security Audit', status: 'In Progress', members: 3, hours: 45, progress: 80, color: 'bg-red-500' },
-  ];
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const data = await api.getProjects();
+        setProjects(data);
+      } catch (err) {
+        console.error("Failed to fetch projects:", err);
+      }
+    };
+    fetchProjects();
+  }, []);
 
   const filteredProjects = projects.filter(p => 
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -56,9 +63,9 @@ const Projects: React.FC<ProjectsProps> = ({ onOpenCreate, searchQuery = '' }) =
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredProjects.map((project) => (
-          <div key={project.id} className="bg-[#151619] border border-white/5 rounded-3xl p-6 hover:border-emerald-500/30 transition-all group">
+          <div key={project._id || project.id} className="bg-[#151619] border border-white/5 rounded-3xl p-6 hover:border-emerald-500/30 transition-all group">
             <div className="flex justify-between items-start mb-6">
-              <div className={`w-12 h-12 rounded-2xl ${project.color} flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
+              <div className={`w-12 h-12 rounded-2xl ${project.color || 'bg-emerald-500'} flex items-center justify-center text-white font-bold text-xl shadow-lg`}>
                 {project.name.charAt(0)}
               </div>
               <button className="p-2 text-gray-500 hover:text-white transition-colors">
@@ -66,7 +73,12 @@ const Projects: React.FC<ProjectsProps> = ({ onOpenCreate, searchQuery = '' }) =
               </button>
             </div>
 
-            <h3 className="text-lg font-bold text-white mb-2 group-hover:text-emerald-500 transition-colors">{project.name}</h3>
+            <h3 
+              className="text-lg font-bold text-white mb-2 group-hover:text-emerald-500 transition-colors cursor-pointer"
+              onClick={() => onProjectClick?.({ id: (project._id || project.id).toString(), name: project.name })}
+            >
+              {project.name}
+            </h3>
             
             <div className="flex items-center gap-4 mb-6">
               <div className="flex items-center gap-1.5 text-gray-500 text-xs">
@@ -86,8 +98,8 @@ const Projects: React.FC<ProjectsProps> = ({ onOpenCreate, searchQuery = '' }) =
               </div>
               <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
                 <div 
-                  className={`${project.color} h-full transition-all duration-1000`} 
-                  style={{ width: `${project.progress}%` }} 
+                  className={`${project.color || 'bg-emerald-500'} h-full transition-all duration-1000`} 
+                  style={{ width: `${project.progress || 0}%` }} 
                 />
               </div>
             </div>

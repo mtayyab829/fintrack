@@ -23,80 +23,43 @@ import { motion, AnimatePresence } from 'motion/react';
 import CreateTaskModal from '../components/Modals/CreateTaskModal';
 import { useToast } from '../components/Toast';
 
-interface Task {
-  id: string;
-  taskId: string;
-  title: string;
-  project: string;
-  priority: 'Low' | 'Medium' | 'High';
-  dueDate: string | null;
-  assignee: string | null;
-  comments: number;
-  status: 'OPEN' | 'IN PROGRESS' | 'REVIEW' | 'DONE';
+import { Task } from '../data';
+import { api } from '../api';
+import { useEffect } from 'react';
+
+interface TasksProps {
+  selectedProject?: { id: string, name: string } | null;
+  onProjectSelect?: (project: { id: string, name: string } | null) => void;
 }
 
-const initialTasks: Task[] = [
-  { 
-    id: '1', 
-    taskId: 'GSWW-1', 
-    title: 'Invite your team members to your workspace', 
-    project: 'Getting Started with WebWork', 
-    priority: 'High', 
-    dueDate: null, 
-    assignee: null, 
-    comments: 0, 
-    status: 'OPEN' 
-  },
-  { 
-    id: '2', 
-    taskId: 'GSWW-2', 
-    title: 'Create a new project and outline your tasks', 
-    project: 'Getting Started with WebWork', 
-    priority: 'Low', 
-    dueDate: null, 
-    assignee: null, 
-    comments: 0, 
-    status: 'OPEN' 
-  },
-  { 
-    id: '3', 
-    taskId: 'GSWW-3', 
-    title: 'Assign team members to your projects', 
-    project: 'Getting Started with WebWork', 
-    priority: 'Medium', 
-    dueDate: null, 
-    assignee: null, 
-    comments: 0, 
-    status: 'OPEN' 
-  },
-  { 
-    id: '4', 
-    taskId: 'GSWW-4', 
-    title: 'Verify team members have installed the software and started tracking time', 
-    project: 'Getting Started with WebWork', 
-    priority: 'Medium', 
-    dueDate: null, 
-    assignee: null, 
-    comments: 0, 
-    status: 'OPEN' 
-  },
-  { 
-    id: '5', 
-    taskId: 'GSWW-5', 
-    title: 'Dive into time tracking reports and productivity insights', 
-    project: 'Getting Started with WebWork', 
-    priority: 'Medium', 
-    dueDate: null, 
-    assignee: null, 
-    comments: 0, 
-    status: 'OPEN' 
-  },
-];
-
-const Tasks = () => {
+const Tasks: React.FC<TasksProps> = ({ selectedProject, onProjectSelect }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const { showToast } = useToast();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tasksData, projectsData] = await Promise.all([
+          api.getTasks(),
+          api.getProjects()
+        ]);
+        setTasks(tasksData);
+        setProjects(projectsData);
+      } catch (err) {
+        console.error("Failed to fetch tasks/projects:", err);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const filteredTasks = tasks.filter(t => 
+    (!selectedProject || t.project === selectedProject.name) &&
+    (t.title.toLowerCase().includes(searchQuery.toLowerCase()) || t.taskId.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const PriorityIcon = ({ priority }: { priority: string }) => {
     if (priority === 'High') {
@@ -148,19 +111,28 @@ const Tasks = () => {
         </div>
         <div className="flex-1 overflow-y-auto py-4">
           <div className="px-4 mb-2">
-            <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-gray-300 hover:bg-white/5 transition-all">
+            <button 
+              onClick={() => onProjectSelect?.(null)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${!selectedProject ? 'bg-indigo-500/10 text-indigo-400' : 'text-gray-300 hover:bg-white/5'}`}
+            >
               <span className="text-sm font-medium">All tasks</span>
-              <span className="text-xs text-gray-500">5</span>
+              <span className="text-xs text-gray-500">{tasks.length}</span>
             </button>
           </div>
-          <div className="px-4">
-            <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-indigo-500/10 text-indigo-400 transition-all">
-              <span className="text-sm font-medium truncate">Getting Started with WebWork</span>
-              <div className="flex items-center gap-1">
-                <span className="text-xs">5</span>
-                <ChevronRight size={14} />
-              </div>
-            </button>
+          <div className="px-4 space-y-1">
+            {projects.map((p) => (
+              <button 
+                key={p.id}
+                onClick={() => onProjectSelect?.({ id: p.id, name: p.name })}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${selectedProject?.id === p.id ? 'bg-indigo-500/10 text-indigo-400' : 'text-gray-400 hover:bg-white/5'}`}
+              >
+                <span className="text-sm font-medium truncate">{p.name}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">{tasks.filter(t => t.project === p.name).length}</span>
+                  <ChevronRight size={14} />
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -203,6 +175,8 @@ const Tasks = () => {
               <input 
                 type="text" 
                 placeholder="Search for tasks" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition-all w-48"
               />
             </div>
@@ -250,7 +224,7 @@ const Tasks = () => {
                 <span className="bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider">OPEN</span>
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
                   <div className="w-1 h-1 rounded-full bg-gray-500" />
-                  5 tasks
+                  {filteredTasks.length} tasks
                 </div>
                 <button className="text-gray-500 hover:text-white text-xs flex items-center gap-1.5 ml-2">
                   <Plus size={14} /> Add Task
@@ -268,7 +242,7 @@ const Tasks = () => {
               </div>
 
               <div className="space-y-4">
-                {initialTasks.map((task) => (
+                {filteredTasks.map((task) => (
                   <div key={task.id} className="group flex items-center bg-[#151619] border border-white/5 rounded-xl p-4 hover:border-white/10 transition-all cursor-pointer">
                     <div className="w-1/3 pr-8">
                       <h4 className="text-sm font-medium text-white group-hover:text-indigo-400 transition-colors leading-relaxed">
